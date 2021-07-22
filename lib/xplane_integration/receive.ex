@@ -119,6 +119,7 @@ defmodule XplaneIntegration.Receive do
     unless Enum.empty?(attitude_rad) do
       publish_gps_relheading(attitude_rad.yaw_rad, state.gps_itow_relheading_group)
     end
+
     {:noreply, state}
   end
 
@@ -161,7 +162,7 @@ defmodule XplaneIntegration.Receive do
   def parse_message(buffer, state) do
     message_type = Enum.at(buffer, 0)
     buffer = Enum.drop(buffer, 4)
-
+    # Logger.debug("msg: #{message_type}")
     {state, buffer} =
       if length(buffer) >= 32 do
         state =
@@ -180,38 +181,40 @@ defmodule XplaneIntegration.Receive do
 
               accel_gravity = ViaUtils.Motion.attitude_to_accel_rad(attitude)
 
-              accel_intertial = parse_accel_intertial(buffer)
+              accel_inertial = parse_accel_inertial(buffer)
+              Logger.debug("accel i xyz: #{ViaUtils.Format.eftb_map(accel_inertial, 3)}")
+              Logger.debug("accel g xyz: #{ViaUtils.Format.eftb_map(accel_gravity, 3)}")
 
               accel = %{
-                ax_mpss: accel_gravity.x + accel_intertial.ax_mpss,
-                ay_mpss: accel_gravity.y + accel_intertial.ay_mpss,
-                az_mpss: accel_gravity.z + accel_intertial.az_mpss
+                ax_mpss: accel_gravity.x + accel_inertial.ax_mpss,
+                ay_mpss: accel_gravity.y + accel_inertial.ay_mpss,
+                az_mpss: accel_gravity.z + accel_inertial.az_mpss
               }
 
-              # Logger.debug("accel xyz: #{eftb(accel.x,3)}/#{eftb(accel.y, 3)}/#{eftb(accel.z, 3)}")
+              # Logger.debug("accel xyz: #{ViaUtils.Format.eftb_map(accel,3)}")
               %{state | bodyaccel_mpss: accel}
 
             16 ->
               bodyrate_rps = parse_bodyrate(buffer)
 
-              # Logger.debug("body: #{eftb(gx_rps*@rad2deg,1)}/#{eftb(gy_rps*@rad2deg,1)}/#{eftb(gz_rps*@rad2deg,1)}")
+              # Logger.debug("body: #{ViaUtils.Format.eftb_map_deg(bodyrate_rps, 1)}")
               %{state | bodyrate_rps: bodyrate_rps}
 
             17 ->
               attitude_rad = parse_attitude(buffer)
-              # Logger.debug("rpy: #{eftb(roll_deg,1)}/#{eftb(pitch_deg, 1)}/#{eftb(yaw_deg, 1)}")
+              Logger.debug("rpy: #{ViaUtils.Format.eftb_map_deg(attitude_rad, 1)}")
               %{state | attitude_rad: attitude_rad}
 
             20 ->
               {position_rrm, agl_m} = parse_position_agl(buffer)
 
-              # Logger.debug("lat/lon/alt: #{eftb(latitude_deg,7)}/#{eftb(longitude_deg, 7)}/#{eftb(altitude_ft, 1)}/#{eftb(agl_ft,1)}")
+              # Logger.debug("lat/lon/alt/agl: #{ViaUtils.Location.to_string(position_rrm)}/#{ViaUtils.Format.eftb(agl_m,1)}")
               %{state | position_rrm: position_rrm, agl_m: agl_m}
 
             21 ->
               velocity_mps = parse_velocity(buffer)
 
-              # Logger.debug("vNED: #{eftb(vel_north_mps,1)}/#{eftb(vel_east_mps, 1)}/#{eftb(vel_down_mps, 1)}")
+              Logger.debug("vNED: #{ViaUtils.Format.eftb_map(velocity_mps, 1)}")
               %{state | velocity_mps: velocity_mps}
 
             _other ->
@@ -237,7 +240,10 @@ defmodule XplaneIntegration.Receive do
     # TODO: Get correct value for itow_ms
     itow_ms = nil
 
-    Logger.debug("pub gps pos/vel: #{ViaUtils.Location.to_string(position_rrm)}/#{ViaUtils.Format.eftb_map(velocity_mps, 1)}")
+    Logger.debug(
+      "pub gps pos/vel: #{ViaUtils.Location.to_string(position_rrm)}/#{ViaUtils.Format.eftb_map(velocity_mps, 1)}"
+    )
+
     ViaUtils.Comms.send_global_msg_to_group(
       __MODULE__,
       {group, itow_ms, position_rrm, velocity_mps},
@@ -250,7 +256,8 @@ defmodule XplaneIntegration.Receive do
     # TODO: Get correct value for itow_ms
     itow_ms = nil
 
-    Logger.debug("pub relhdg: #{ViaUtils.Format.eftb_deg(rel_heading_rad,1)}")
+    Logger.debug("pub relhdg: #{ViaUtils.Format.eftb_deg(rel_heading_rad, 1)}")
+
     ViaUtils.Comms.send_global_msg_to_group(
       __MODULE__,
       {group, itow_ms, rel_heading_rad},
@@ -265,7 +272,7 @@ defmodule XplaneIntegration.Receive do
       |> Map.merge(accel_mpss)
       |> Map.merge(gyro_rps)
 
-    Logger.debug("pub dtaccgy: #{ViaUtils.Format.eftb_map(values,4)}")
+    # Logger.debug("pub dtaccgy: #{ViaUtils.Format.eftb_map(values,4)}")
     ViaUtils.Comms.send_global_msg_to_group(
       __MODULE__,
       {group, values},
@@ -276,6 +283,7 @@ defmodule XplaneIntegration.Receive do
   @spec publish_airspeed(float(), any()) :: atom()
   def publish_airspeed(airspeed_mps, group) do
     Logger.debug("pub A/S: #{ViaUtils.Format.eftb(airspeed_mps, 1)}")
+
     ViaUtils.Comms.send_global_msg_to_group(
       __MODULE__,
       {group, airspeed_mps},
@@ -289,6 +297,7 @@ defmodule XplaneIntegration.Receive do
     range_meas = if range_meas < 0, do: 0, else: range_meas
 
     Logger.debug("pub tof: #{ViaUtils.Format.eftb(range_meas, 1)}")
+
     ViaUtils.Comms.send_global_msg_to_group(
       __MODULE__,
       {group, range_meas},
@@ -299,38 +308,57 @@ defmodule XplaneIntegration.Receive do
   @spec parse_airspeed(list()) :: number()
   def parse_airspeed(buffer) do
     {indicated_airspeed_knots_uint32, _buffer} = Enum.split(buffer, 4)
-    ViaUtils.Enum.list_to_int(indicated_airspeed_knots_uint32, 4) |> ViaUtils.Math.fp_from_uint(32)
+
+    ViaUtils.Enum.list_to_int(indicated_airspeed_knots_uint32, 4)
+    |> ViaUtils.Math.fp_from_uint(32)
     |> Kernel.*(VC.knots2mps())
   end
 
-  @spec parse_accel_intertial(list()) :: map()
-  def parse_accel_intertial(buffer) do
-    {_mach_uint32, buffer} = Enum.split(buffer, 4)
-    {_unknown, buffer} = Enum.split(buffer, 4)
-    {_unknown, buffer} = Enum.split(buffer, 4)
-    {_unknown, buffer} = Enum.split(buffer, 4)
-    {accel_z_g_int32, buffer} = Enum.split(buffer, 4)
-    {accel_x_g_uint32, buffer} = Enum.split(buffer, 4)
+  @spec parse_accel_inertial(list()) :: map()
+  def parse_accel_inertial(buffer) do
+    spoof = false
 
-    {accel_y_g_uint32, _buffer} = Enum.split(buffer, 4)
+    if spoof do
+      Enum.reduce(1..8, buffer, fn _x, acc ->
+        {value, buffer} = Enum.split(acc, 4)
 
-    accel_z_mpss =
-      ViaUtils.Enum.list_to_int(accel_z_g_int32, 4)
-      |> ViaUtils.Math.fp_from_uint(32)
-      |> Kernel.-(1)
+        value =
+          ViaUtils.Enum.list_to_int(value, 4)
+          |> ViaUtils.Math.fp_from_uint(32)
+
+        Logger.warn(ViaUtils.Format.eftb(value, 3))
+        buffer
+      end)
+
+      %{ax_mpss: 0, ay_mpss: 0, az_mpss: 0}
+    else
+      {_mach_uint32, buffer} = Enum.split(buffer, 4)
+      {_vvi, buffer} = Enum.split(buffer, 4)
+      {_unknown, buffer} = Enum.split(buffer, 4)
+      {_unknown, buffer} = Enum.split(buffer, 4)
+      {accel_z_g_uint32, buffer} = Enum.split(buffer, 4)
+      {accel_x_g_uint32, buffer} = Enum.split(buffer, 4)
+
+      {accel_y_g_uint32, _buffer} = Enum.split(buffer, 4)
+
+      accel_z_mpss =
+        ViaUtils.Enum.list_to_int(accel_z_g_uint32, 4)
+        |> ViaUtils.Math.fp_from_uint(32)
+        |> Kernel.-(1)
+      |> Kernel.*(-VC.gravity())
+
+      accel_x_mpss =
+        ViaUtils.Enum.list_to_int(accel_x_g_uint32, 4)
+        |> ViaUtils.Math.fp_from_uint(32)
       |> Kernel.*(VC.gravity())
 
-    accel_x_mpss =
-      ViaUtils.Enum.list_to_int(accel_x_g_uint32, 4)
-      |> ViaUtils.Math.fp_from_uint(32)
+      accel_y_mpss =
+        ViaUtils.Enum.list_to_int(accel_y_g_uint32, 4)
+        |> ViaUtils.Math.fp_from_uint(32)
       |> Kernel.*(VC.gravity())
 
-    accel_y_mpss =
-      ViaUtils.Enum.list_to_int(accel_y_g_uint32, 4)
-      |> ViaUtils.Math.fp_from_uint(32)
-      |> Kernel.*(VC.gravity())
-
-    %{ax_mpss: accel_x_mpss, ay_mpss: accel_y_mpss, az_mpss: accel_z_mpss}
+      %{ax_mpss: accel_x_mpss, ay_mpss: accel_y_mpss, az_mpss: accel_z_mpss}
+    end
   end
 
   @spec parse_bodyrate(list()) :: map()

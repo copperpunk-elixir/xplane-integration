@@ -41,12 +41,11 @@ defmodule XplaneIntegration.Send do
 
   @impl GenServer
   def handle_cast({:simulation_update_actuators, actuators_and_outputs}, state) do
-    Logger.debug("xp send rx up_act: #{ViaUtils.Format.eftb_map(actuators_and_outputs, 3)}")
+    # Logger.debug("xp send rx up_act: #{ViaUtils.Format.eftb_map(actuators_and_outputs, 3)}")
     cmds =
       Enum.reduce(actuators_and_outputs, %{}, fn {actuator_name, output}, acc ->
         case actuator_name do
-          :throttle_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
-          :flaps_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
+          # :flaps_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
           :gear_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
           name -> Map.put(acc, name, output)
         end
@@ -79,15 +78,13 @@ defmodule XplaneIntegration.Send do
   def send_ail_elev_rud_commands(commands, socket, dest_ip, port) do
     buffer =
       (@cmd_header <> <<11, 0, 0, 0>>)
-      |> Kernel.<>(ViaUtils.Math.uint_from_fp(Map.get(commands, :elevator, -999), 32))
-      |> Kernel.<>(ViaUtils.Math.uint_from_fp(Map.get(commands, :aileron, -999), 32))
-      |> Kernel.<>(ViaUtils.Math.uint_from_fp(Map.get(commands, :rudder, -999), 32))
+      |> Kernel.<>(ViaUtils.Math.uint_from_fp(Map.get(commands, :elevator_scaled, -999), 32))
+      |> Kernel.<>(ViaUtils.Math.uint_from_fp(Map.get(commands, :aileron_scaled, -999), 32))
+      |> Kernel.<>(ViaUtils.Math.uint_from_fp(Map.get(commands, :rudder_scaled, -999), 32))
       |> Kernel.<>(@zeros_5)
 
-    # Logger.debug("buffer: #{buffer}")
     # Logger.debug("ail/elev/rud: #{Map.get(commands, :aileron)}/#{Map.get(commands, :elevator)}/#{Map.get(commands, :rudder)}")
-    Logger.debug("ail-elev-rud: #{ViaUtils.Format.eftb_map(commands, 3)}")
-    Logger.debug("sock/ip/port: #{inspect(socket)}/#{inspect(dest_ip)}/#{port}")
+    # Logger.debug("ail-elev-rud: #{ViaUtils.Format.eftb_map(commands, 3)}")
     :gen_udp.send(socket, dest_ip, port, buffer)
   end
 
@@ -95,22 +92,22 @@ defmodule XplaneIntegration.Send do
   def send_throttle_command(commands, socket, dest_ip, port) do
     buffer =
       (@cmd_header <> <<25, 0, 0, 0>>)
-      |> Kernel.<>(ViaUtils.Math.uint_from_fp(Map.get(commands, :throttle, -999), 32))
+      |> Kernel.<>(ViaUtils.Math.uint_from_fp(Map.get(commands, :throttle_scaled, -999), 32))
       |> Kernel.<>(@zeros_7)
 
     # |> Kernel.<>(<<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>)
     # Logger.debug("buffer: #{buffer}")
-    # Logger.debug("thr: #{Map.get(commands, :throttle)}")
+    # Logger.debug("thr: #{Map.get(commands, :throttle_scaled)}")
     :gen_udp.send(socket, dest_ip, port, buffer)
   end
 
   @spec send_flaps_command(map(), any(), tuple(), integer()) :: atom()
   def send_flaps_command(commands, socket, dest_ip, port) do
-    # Logger.debug("flaps: #{Map.get(commands, :flaps)}")
+    # Logger.error("flaps: #{Map.get(commands, :flaps_scaled)}")
     buffer =
       (@cmd_header <> <<13, 0, 0, 0>>)
       |> Kernel.<>(@zeros_3)
-      |> Kernel.<>(ViaUtils.Math.uint_from_fp(Map.get(commands, :flaps, -999), 32))
+      |> Kernel.<>(ViaUtils.Math.uint_from_fp(Map.get(commands, :flaps_scaled, -999), 32))
       |> Kernel.<>(ViaUtils.Math.uint_from_fp(-999, 32))
       |> Kernel.<>(ViaUtils.Math.uint_from_fp(-999, 32))
       |> Kernel.<>(@zeros_1)
@@ -121,17 +118,17 @@ defmodule XplaneIntegration.Send do
 
   @spec send_ail_elev_rud_commands_test(map()) :: atom()
   def send_ail_elev_rud_commands_test(commands) do
-    GenServer.cast(__MODULE__, {:send, :ail_elev_rud, commands})
+    GenServer.cast(__MODULE__, {:send_commands, :ail_elev_rud, commands})
   end
 
   @spec send_throttle_command_test(map()) :: atom()
   def send_throttle_command_test(commands) do
-    GenServer.cast(__MODULE__, {:send, :throttle, commands})
+    GenServer.cast(__MODULE__, {:send_commands, :throttle, commands})
   end
 
   @spec send_flaps_command_test(map()) :: atom()
   def send_flaps_command_test(commands) do
-    GenServer.cast(__MODULE__, {:send, :flaps, commands})
+    GenServer.cast(__MODULE__, {:send_commands, :flaps, commands})
   end
 
   @spec get_one_sided_value(number()) :: number()

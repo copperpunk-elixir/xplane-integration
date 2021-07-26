@@ -36,6 +36,7 @@ defmodule XplaneIntegration.Receive do
       velocity_mps: %{},
       agl_m: nil,
       airspeed_mps: nil,
+      velocity_time_prev_us: nil,
       dt_accel_gyro_group: config[:dt_accel_gyro_group],
       gps_itow_position_velocity_group: config[:gps_itow_position_velocity_group],
       gps_itow_relheading_group: config[:gps_itow_relheading_group],
@@ -171,28 +172,28 @@ defmodule XplaneIntegration.Receive do
               indicated_airspeed_mps = parse_airspeed(buffer)
               %{state | airspeed_mps: indicated_airspeed_mps}
 
-            4 ->
-              # Add accel due to gravity
-              # Logger.debug("accel_mpss xyz: #{eftb(accel_x_mpss,3)}/#{eftb(accel_y_mpss, 3)}/#{eftb(accel_z_mpss, 3)}")
-              attitude =
-                if Enum.empty?(state.attitude_rad),
-                  do: %{roll_rad: 0.0, pitch_rad: 0.0, yaw_rad: 0.0},
-                  else: state.attitude_rad
+            # 4 ->
+            #   # Add accel due to gravity
+            #   # Logger.debug("accel_mpss xyz: #{eftb(accel_x_mpss,3)}/#{eftb(accel_y_mpss, 3)}/#{eftb(accel_z_mpss, 3)}")
+            #   attitude =
+            #     if Enum.empty?(state.attitude_rad),
+            #       do: %{roll_rad: 0.0, pitch_rad: 0.0, yaw_rad: 0.0},
+            #       else: state.attitude_rad
 
-              accel_gravity = ViaUtils.Motion.attitude_to_accel_rad(attitude)
+            #   accel_gravity = ViaUtils.Motion.attitude_to_accel_rad(attitude)
 
-              accel_inertial = parse_accel_inertial(buffer)
-              # Logger.debug("accel i xyz: #{ViaUtils.Format.eftb_map(accel_inertial, 3)}")
-              # Logger.debug("accel g xyz: #{ViaUtils.Format.eftb_map(accel_gravity, 3)}")
+            #   accel_inertial = parse_accel_inertial(buffer)
+            #   # Logger.debug("accel i xyz: #{ViaUtils.Format.eftb_map(accel_inertial, 3)}")
+            #   # Logger.debug("accel g xyz: #{ViaUtils.Format.eftb_map(accel_gravity, 3)}")
 
-              accel = %{
-                ax_mpss: accel_gravity.x + accel_inertial.ax_mpss,
-                ay_mpss: accel_gravity.y + accel_inertial.ay_mpss,
-                az_mpss: accel_gravity.z + accel_inertial.az_mpss
-              }
+            #   accel = %{
+            #     ax_mpss: accel_gravity.x + accel_inertial.ax_mpss,
+            #     ay_mpss: accel_gravity.y + accel_inertial.ay_mpss,
+            #     az_mpss: accel_gravity.z + accel_inertial.az_mpss
+            #   }
 
-              # Logger.debug("accel xyz: #{ViaUtils.Format.eftb_map(accel,3)}")
-              %{state | bodyaccel_mpss: accel}
+            #   # Logger.debug("accel xyz: #{ViaUtils.Format.eftb_map(accel,3)}")
+            #   %{state | bodyaccel_mpss: accel}
 
             16 ->
               bodyrate_rps = parse_bodyrate(buffer)
@@ -202,7 +203,7 @@ defmodule XplaneIntegration.Receive do
 
             17 ->
               attitude_rad = parse_attitude(buffer)
-              Logger.debug("rpy: #{ViaUtils.Format.eftb_map_deg(attitude_rad, 1)}")
+              Logger.debug("XP rpy: #{ViaUtils.Format.eftb_map_deg(attitude_rad, 1)}")
               %{state | attitude_rad: attitude_rad}
 
             20 ->
@@ -213,9 +214,29 @@ defmodule XplaneIntegration.Receive do
 
             21 ->
               velocity_mps = parse_velocity(buffer)
+              current_time_us = :os.system_time(:microsecond)
 
-              Logger.debug("vNED: #{ViaUtils.Format.eftb_map(velocity_mps, 1)}")
-              %{state | velocity_mps: velocity_mps}
+              dt_s =
+                if is_nil(state.velocity_time_prev_us),
+                  do: 0,
+                  else: (current_time_us - state.velocity_time_prev_us) * 1.0e-6
+
+              attitude_rad =
+                if Enum.empty?(state.attitude_rad),
+                  do: %{roll_rad: 0.0, pitch_rad: 0.0, yaw_rad: 0.0},
+                  else: state.attitude_rad
+
+              velocity_prev_mps =
+                if Enum.empty?(state.velocity_mps),
+                  do: %{north_mps: 0, east_mps: 0, down_mps: 0},
+                  else: state.velocity_mps
+
+              bodyaccel_mpss =
+                calculate_body_accel(velocity_mps, velocity_prev_mps, attitude_rad, dt_s)
+
+              # Logger.debug("vNED: #{ViaUtils.Format.eftb_map(velocity_mps, 1)}")
+              Logger.debug("bodyaccel: #{ViaUtils.Format.eftb_map(bodyaccel_mpss, 3)}")
+              %{state | velocity_mps: velocity_mps, bodyaccel_mpss: bodyaccel_mpss, velocity_time_prev_us: current_time_us}
 
             _other ->
               Logger.debug("unknown type")
@@ -240,9 +261,9 @@ defmodule XplaneIntegration.Receive do
     # TODO: Get correct value for itow_ms
     itow_ms = nil
 
-    Logger.debug(
-      "pub gps pos/vel: #{ViaUtils.Location.to_string(position_rrm)}/#{ViaUtils.Format.eftb_map(velocity_mps, 1)}"
-    )
+    # Logger.debug(
+    #   "pub gps pos/vel: #{ViaUtils.Location.to_string(position_rrm)}/#{ViaUtils.Format.eftb_map(velocity_mps, 1)}"
+    # )
 
     ViaUtils.Comms.send_global_msg_to_group(
       __MODULE__,
@@ -256,7 +277,7 @@ defmodule XplaneIntegration.Receive do
     # TODO: Get correct value for itow_ms
     itow_ms = nil
 
-    Logger.debug("pub relhdg: #{ViaUtils.Format.eftb_deg(rel_heading_rad, 1)}")
+    # Logger.debug("pub relhdg: #{ViaUtils.Format.eftb_deg(rel_heading_rad, 1)}")
 
     ViaUtils.Comms.send_global_msg_to_group(
       __MODULE__,
@@ -296,7 +317,7 @@ defmodule XplaneIntegration.Receive do
     range_meas = agl_m / (:math.cos(attitude_rad.roll_rad) * :math.cos(attitude_rad.pitch_rad))
     range_meas = if range_meas < 0, do: 0, else: range_meas
 
-    Logger.debug("pub tof: #{ViaUtils.Format.eftb(range_meas, 1)}")
+    # Logger.debug("pub tof: #{ViaUtils.Format.eftb(range_meas, 1)}")
 
     ViaUtils.Comms.send_global_msg_to_group(
       __MODULE__,
@@ -345,17 +366,17 @@ defmodule XplaneIntegration.Receive do
         ViaUtils.Enum.list_to_int(accel_z_g_uint32, 4)
         |> ViaUtils.Math.fp_from_uint(32)
         |> Kernel.-(1)
-      |> Kernel.*(-VC.gravity())
+        |> Kernel.*(-VC.gravity())
 
       accel_x_mpss =
         ViaUtils.Enum.list_to_int(accel_x_g_uint32, 4)
         |> ViaUtils.Math.fp_from_uint(32)
-      |> Kernel.*(VC.gravity())
+        |> Kernel.*(VC.gravity())
 
       accel_y_mpss =
         ViaUtils.Enum.list_to_int(accel_y_g_uint32, 4)
         |> ViaUtils.Math.fp_from_uint(32)
-      |> Kernel.*(VC.gravity())
+        |> Kernel.*(VC.gravity())
 
       %{ax_mpss: accel_x_mpss, ay_mpss: accel_y_mpss, az_mpss: accel_z_mpss}
     end
@@ -456,6 +477,29 @@ defmodule XplaneIntegration.Receive do
       north_mps: vel_north_mps,
       east_mps: vel_east_mps,
       down_mps: vel_down_mps
+    }
+  end
+
+  @spec calculate_body_accel(map(), map(), map(), number()) :: map()
+  def calculate_body_accel(velocity_mps, velocity_prev_mps, attitude_rad, dt_s) do
+    accel_inertial =
+      if dt_s > 0 do
+        {(velocity_mps.north_mps - velocity_prev_mps.north_mps) / dt_s,
+         (velocity_mps.east_mps - velocity_prev_mps.east_mps) / dt_s,
+         (velocity_mps.down_mps - velocity_prev_mps.down_mps) / dt_s}
+      else
+        {0, 0, 0}
+      end
+
+    {abx, aby, abz} = ViaUtils.Motion.inertial_to_body_euler_rad(attitude_rad, accel_inertial)
+
+    Logger.debug("dt: #{ViaUtils.Format.eftb(dt_s,4}")
+    accel_gravity = ViaUtils.Motion.attitude_to_accel_rad(attitude_rad)
+
+    %{
+      ax_mpss: accel_gravity.x + abx,
+      ay_mpss: accel_gravity.y + aby,
+      az_mpss: accel_gravity.z + abz
     }
   end
 end

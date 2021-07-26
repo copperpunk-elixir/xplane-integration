@@ -182,8 +182,8 @@ defmodule XplaneIntegration.Receive do
               accel_gravity = ViaUtils.Motion.attitude_to_accel_rad(attitude)
 
               accel_inertial = parse_accel_inertial(buffer)
-              Logger.debug("accel i xyz: #{ViaUtils.Format.eftb_map(accel_inertial, 3)}")
-              Logger.debug("accel g xyz: #{ViaUtils.Format.eftb_map(accel_gravity, 3)}")
+              # Logger.debug("accel i xyz: #{ViaUtils.Format.eftb_map(accel_inertial, 3)}")
+              # Logger.debug("accel g xyz: #{ViaUtils.Format.eftb_map(accel_gravity, 3)}")
 
               accel = %{
                 ax_mpss: accel_gravity.x + accel_inertial.ax_mpss,

@@ -235,7 +235,7 @@ defmodule XplaneIntegration.Receive do
                 calculate_body_accel(velocity_mps, velocity_prev_mps, attitude_rad, dt_s)
 
               # Logger.debug("vNED: #{ViaUtils.Format.eftb_map(velocity_mps, 1)}")
-              Logger.debug("bodyaccel: #{ViaUtils.Format.eftb_map(bodyaccel_mpss, 3)}")
+              # Logger.debug("bodyaccel: #{ViaUtils.Format.eftb_map(bodyaccel_mpss, 3)}")
               %{state | velocity_mps: velocity_mps, bodyaccel_mpss: bodyaccel_mpss, velocity_time_prev_us: current_time_us}
 
             _other ->
@@ -486,20 +486,24 @@ defmodule XplaneIntegration.Receive do
       if dt_s > 0 do
         {(velocity_mps.north_mps - velocity_prev_mps.north_mps) / dt_s,
          (velocity_mps.east_mps - velocity_prev_mps.east_mps) / dt_s,
-         (velocity_mps.down_mps - velocity_prev_mps.down_mps) / dt_s}
+         (velocity_mps.down_mps - velocity_prev_mps.down_mps) / dt_s - VC.gravity()}
       else
-        {0, 0, 0}
+        {0, 0, -VC.gravity}
       end
 
+    # Logger.debug("iner: #{ViaUtils.Format.eftb_list(Tuple.to_list(accel_inertial), 3)}")
     {abx, aby, abz} = ViaUtils.Motion.inertial_to_body_euler_rad(attitude_rad, accel_inertial)
+    # Add gravity
+    # Rotate entire vector to body frame
+    # Logger.debug("iner: #{ViaUtils.Format.eftb_map(%{ax: abx, ay: aby, az: abz}, 3)}")
+    # Logger.debug("dt: #{ViaUtils.Format.eftb(dt_s,4)}")
+    # accel_gravity = ViaUtils.Motion.attitude_to_accel_rad(attitude_rad)
 
-    Logger.debug("dt: #{ViaUtils.Format.eftb(dt_s,4}")
-    accel_gravity = ViaUtils.Motion.attitude_to_accel_rad(attitude_rad)
-
+    # Logger.debug("grav: #{ViaUtils.Format.eftb_map(accel_gravity, 3)}")
     %{
-      ax_mpss: accel_gravity.x + abx,
-      ay_mpss: accel_gravity.y + aby,
-      az_mpss: accel_gravity.z + abz
+      ax_mpss: abx,
+      ay_mpss: aby,
+      az_mpss: abz
     }
   end
 end

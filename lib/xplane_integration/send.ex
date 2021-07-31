@@ -11,13 +11,14 @@ defmodule XplaneIntegration.Send do
   @zeros_7 <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0>>
 
   def start_link(config) do
-    Logger.debug("Start Simulation.XplaneReceive")
+    Logger.debug("Start Simulation.XplaneSend")
     ViaUtils.Process.start_link_redundant(GenServer, __MODULE__, config, __MODULE__)
   end
 
   @impl GenServer
   def init(config) do
-    {:ok, socket} = :gen_udp.open(Keyword.fetch!(config, :source_port), broadcast: false, active: true)
+    {:ok, socket} =
+      :gen_udp.open(Keyword.fetch!(config, :source_port), broadcast: false, active: true)
 
     state = %{
       socket: socket,
@@ -40,14 +41,20 @@ defmodule XplaneIntegration.Send do
   end
 
   @impl GenServer
-  def handle_cast({:simulation_update_actuators, actuators_and_outputs}, state) do
+  def handle_cast({:simulation_update_actuators, actuators_and_outputs, is_override}, state) do
     # Logger.debug("xp send rx up_act: #{ViaUtils.Format.eftb_map(actuators_and_outputs, 3)}")
+
     cmds =
       Enum.reduce(actuators_and_outputs, %{}, fn {actuator_name, output}, acc ->
-        case actuator_name do
-          # :flaps_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
-          :gear_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
-          name -> Map.put(acc, name, output)
+        if is_override do
+          case actuator_name do
+            :flaps_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
+            :gear_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
+            :throttle_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
+            name -> Map.put(acc, name, output)
+          end
+        else
+          Map.put(acc, actuator_name, output)
         end
       end)
 
@@ -57,7 +64,7 @@ defmodule XplaneIntegration.Send do
     send_ail_elev_rud_commands(cmds, socket, dest_ip, dest_port)
     send_throttle_command(cmds, socket, dest_ip, dest_port)
     send_flaps_command(cmds, socket, dest_ip, dest_port)
-    # Logger.debug("up act cmds: #{inspect(cmds)}")
+    # Logger.debug("up act cmds: #{ViaUtils.Format.eftb_map(cmds, 3)}")
     {:noreply, state}
   end
 
@@ -70,7 +77,13 @@ defmodule XplaneIntegration.Send do
         :flaps -> :send_flaps_command
       end
 
-    apply(__MODULE__, function, [commands, state.socket, state.destination_ip, state.destination_port])
+    apply(__MODULE__, function, [
+      commands,
+      state.socket,
+      state.destination_ip,
+      state.destination_port
+    ])
+
     {:noreply, state}
   end
 
@@ -133,6 +146,6 @@ defmodule XplaneIntegration.Send do
 
   @spec get_one_sided_value(number()) :: number()
   def get_one_sided_value(two_sided_value) do
-    2 * (two_sided_value - 0.5)
+    0.5 * two_sided_value + 0.5
   end
 end

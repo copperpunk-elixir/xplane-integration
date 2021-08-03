@@ -238,8 +238,8 @@ defmodule XplaneIntegration.Receive do
               # Logger.debug("bodyaccel: #{ViaUtils.Format.eftb_map(bodyaccel_mpss, 3)}")
               %{state | velocity_mps: velocity_mps, bodyaccel_mpss: bodyaccel_mpss, velocity_time_prev_us: current_time_us}
 
-            _other ->
-              Logger.debug("unknown type")
+            other ->
+              Logger.debug("unknown type: #{other}")
               state
           end
 

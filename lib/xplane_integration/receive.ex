@@ -203,7 +203,7 @@ defmodule XplaneIntegration.Receive do
 
             17 ->
               attitude_rad = parse_attitude(buffer)
-              Logger.debug("XP rpy: #{ViaUtils.Format.eftb_map_deg(attitude_rad, 1)}")
+              # Logger.debug("XP rpy: #{ViaUtils.Format.eftb_map_deg(attitude_rad, 1)}")
               %{state | attitude_rad: attitude_rad}
 
             20 ->

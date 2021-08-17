@@ -1,21 +1,18 @@
 # XplaneIntegration
 
-**TODO: Add description**
+Documentation will added as soon as we can get to it. We're focusing on getting [Via](https://github.com/copperpunk-elixir/via) up and running right now (which uses this package as a dependency). If you would like to integrate X-Plane with your Elixir project, visit www.copperpunk.com to drop us a line. We can surely get you on your way.
 
 ## Installation
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `xplane_integration` to your list of dependencies in `mix.exs`:
+This package can be installed by adding `xplane_integration` to your list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:xplane_integration, "~> 0.1.0"}
+    {:xplane_integration, "~> 0.1.1"}
   ]
 end
 ```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/xplane_integration](https://hexdocs.pm/xplane_integration).
+Documentation (when it is written) can be found at [https://hexdocs.pm/xplane_integration](https://hexdocs.pm/xplane_integration).
 

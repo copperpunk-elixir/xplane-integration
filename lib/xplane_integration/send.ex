@@ -2,13 +2,15 @@ defmodule XplaneIntegration.Send do
   use Bitwise
   use GenServer
   require Logger
-  # alias ViaUtils.Constants, as: VC
   @cmd_header <<68, 65, 84, 65, 0>>
   @zeros_1 <<0, 0, 0, 0>>
   @zeros_3 <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0>>
   # @zeros_4 <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>
   @zeros_5 <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0>>
   @zeros_7 <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0>>
+
+  @request_ip_address_loop :request_ip_address_loop
+  @request_ip_address_loop_interval 1000
 
   def start_link(config) do
     Logger.debug("Start Simulation.XplaneSend")
@@ -20,9 +22,16 @@ defmodule XplaneIntegration.Send do
     {:ok, socket} =
       :gen_udp.open(Keyword.fetch!(config, :source_port), broadcast: false, active: true)
 
+    request_ip_address_timer =
+      ViaUtils.Process.start_loop(
+        self(),
+        @request_ip_address_loop_interval,
+        @request_ip_address_loop
+      )
+
     state = %{
       socket: socket,
-      destination_ip: Keyword.fetch!(config, :destination_ip),
+      destination_ip_address: nil,
       destination_port: Keyword.fetch!(config, :destination_port),
       bodyaccel: %{},
       attitude: %{},
@@ -31,7 +40,8 @@ defmodule XplaneIntegration.Send do
       velocity: %{},
       agl: 0,
       airspeed: 0,
-      new_simulation_data_to_publish: false
+      new_simulation_data_to_publish: false,
+      request_ip_address_timer: request_ip_address_timer
     }
 
     ViaUtils.Comms.Supervisor.start_operator(__MODULE__)
@@ -41,29 +51,52 @@ defmodule XplaneIntegration.Send do
   end
 
   @impl GenServer
+  def handle_info(@request_ip_address_loop, state) do
+    state =
+      if is_nil(state.destination_ip_address) do
+        GenServer.cast(XplaneIntegration.Receive, {:get_ip_address, self()})
+        state
+      else
+        ViaUtils.Process.stop_loop(state.request_ip_address_timer)
+        %{state | request_ip_address_timer: nil}
+      end
+
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_cast({:set_ip_address, ip_address}, state) do
+    {:noreply, %{state | destination_ip_address: ip_address}}
+  end
+
+  @impl GenServer
   def handle_cast({:simulation_update_actuators, actuators_and_outputs, is_override}, state) do
     # Logger.debug("xp send rx up_act: #{ViaUtils.Format.eftb_map(actuators_and_outputs, 3)}")
 
-    cmds =
-      Enum.reduce(actuators_and_outputs, %{}, fn {actuator_name, output}, acc ->
-        if is_override do
-          case actuator_name do
-            :flaps_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
-            :gear_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
-            :throttle_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
-            name -> Map.put(acc, name, output)
-          end
-        else
-          Map.put(acc, actuator_name, output)
-        end
-      end)
+    dest_ip = state.destination_ip_address
 
-    socket = state.socket
-    dest_ip = state.destination_ip
-    dest_port = state.destination_port
-    send_ail_elev_rud_commands(cmds, socket, dest_ip, dest_port)
-    send_throttle_command(cmds, socket, dest_ip, dest_port)
-    send_flaps_command(cmds, socket, dest_ip, dest_port)
+    unless is_nil(dest_ip) do
+      cmds =
+        Enum.reduce(actuators_and_outputs, %{}, fn {actuator_name, output}, acc ->
+          if is_override do
+            case actuator_name do
+              :flaps_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
+              :gear_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
+              :throttle_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
+              name -> Map.put(acc, name, output)
+            end
+          else
+            Map.put(acc, actuator_name, output)
+          end
+        end)
+
+      socket = state.socket
+      dest_port = state.destination_port
+      send_ail_elev_rud_commands(cmds, socket, dest_ip, dest_port)
+      send_throttle_command(cmds, socket, dest_ip, dest_port)
+      send_flaps_command(cmds, socket, dest_ip, dest_port)
+    end
+
     # Logger.debug("up act cmds: #{ViaUtils.Format.eftb_map(cmds, 3)}")
     {:noreply, state}
   end
@@ -80,7 +113,7 @@ defmodule XplaneIntegration.Send do
     apply(__MODULE__, function, [
       commands,
       state.socket,
-      state.destination_ip,
+      state.destination_ip_address,
       state.destination_port
     ])
 

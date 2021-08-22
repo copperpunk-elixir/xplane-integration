@@ -29,6 +29,7 @@ defmodule XplaneIntegration.Receive do
     state = %{
       socket: socket,
       port: port,
+      source_ip_address: nil,
       bodyaccel_mpss: %{},
       attitude_rad: %{},
       bodyrate_rps: %{},
@@ -74,9 +75,22 @@ defmodule XplaneIntegration.Receive do
   end
 
   @impl GenServer
-  def handle_info({:udp, _socket, _src_ip, _src_port, msg}, state) do
+  def handle_cast({:get_ip_address, from}, state) do
+    src_ip = state.source_ip_address
+
+    unless is_nil(src_ip) do
+      GenServer.cast(from, {:set_ip_address, src_ip})
+    end
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_info({:udp, _socket, src_ip, _src_port, msg}, state) do
     # Logger.debug("received data from #{inspect(src_ip)} on port #{src_port} with length #{length(msg)}")
-    state = parse_data_buffer(msg, state)
+    state =
+      parse_data_buffer(msg, state)
+      |> Map.put(:source_ip_address, src_ip)
+
     {:noreply, state}
   end
 
@@ -236,7 +250,12 @@ defmodule XplaneIntegration.Receive do
 
               # Logger.debug("vNED: #{ViaUtils.Format.eftb_map(velocity_mps, 1)}")
               # Logger.debug("bodyaccel: #{ViaUtils.Format.eftb_map(bodyaccel_mpss, 3)}")
-              %{state | velocity_mps: velocity_mps, bodyaccel_mpss: bodyaccel_mpss, velocity_time_prev_us: current_time_us}
+              %{
+                state
+                | velocity_mps: velocity_mps,
+                  bodyaccel_mpss: bodyaccel_mpss,
+                  velocity_time_prev_us: current_time_us
+              }
 
             other ->
               Logger.debug("unknown type: #{other}")
@@ -488,7 +507,7 @@ defmodule XplaneIntegration.Receive do
          (velocity_mps.east_mps - velocity_prev_mps.east_mps) / dt_s,
          (velocity_mps.down_mps - velocity_prev_mps.down_mps) / dt_s - VC.gravity()}
       else
-        {0, 0, -VC.gravity}
+        {0, 0, -VC.gravity()}
       end
 
     # Logger.debug("iner: #{ViaUtils.Format.eftb_list(Tuple.to_list(accel_inertial), 3)}")

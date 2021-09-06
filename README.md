@@ -9,7 +9,7 @@ This package can be installed by adding `xplane_integration` to your list of dep
 ```elixir
 def deps do
   [
-    {:xplane_integration, "~> 0.1.1"}
+    {:xplane_integration, "~> 0.1.3"}
   ]
 end
 ```

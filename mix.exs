@@ -1,7 +1,7 @@
 defmodule XplaneIntegration.MixProject do
   use Mix.Project
 
-  @version "0.1.2"
+  @version "0.1.3"
   @source_url "https://github.com/copperpunk-elixir/xplane-integration"
 
   def project do
@@ -49,7 +49,7 @@ defmodule XplaneIntegration.MixProject do
   defp deps do
     [
       {:ex_doc, "~> 0.24", only: :dev, runtime: false},
-      {:via_utils, "~> 0.1.1"}
+      {:via_utils, "~> 0.1.4"}
       # {:dep_from_hexpm, "~> 0.3.0"},
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
     ]

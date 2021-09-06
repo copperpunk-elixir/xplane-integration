@@ -22,10 +22,14 @@ defmodule XplaneIntegration do
 
   @impl Supervisor
   def init(config) do
-    children = [
-      {XplaneIntegration.Receive, config[:receive]},
-      {XplaneIntegration.Send, config[:send]},
-    ]
+    children = [{XplaneIntegration.Receive, config[:receive]}]
+
+    send_config = Keyword.get(config, :send)
+
+    children =
+      if is_nil(send_config),
+        do: children,
+        else: children ++ [{XplaneIntegration.Send, config[:send]}]
 
     Supervisor.init(children, strategy: :one_for_one)
   end

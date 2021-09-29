@@ -81,6 +81,7 @@ defmodule XplaneIntegration.Receive do
     unless is_nil(src_ip) do
       GenServer.cast(from, {:set_ip_address, src_ip})
     end
+
     {:noreply, state}
   end
 
@@ -185,29 +186,6 @@ defmodule XplaneIntegration.Receive do
             3 ->
               indicated_airspeed_mps = parse_airspeed(buffer)
               %{state | airspeed_mps: indicated_airspeed_mps}
-
-            # 4 ->
-            #   # Add accel due to gravity
-            #   # Logger.debug("accel_mpss xyz: #{eftb(accel_x_mpss,3)}/#{eftb(accel_y_mpss, 3)}/#{eftb(accel_z_mpss, 3)}")
-            #   attitude =
-            #     if Enum.empty?(state.attitude_rad),
-            #       do: %{roll_rad: 0.0, pitch_rad: 0.0, yaw_rad: 0.0},
-            #       else: state.attitude_rad
-
-            #   accel_gravity = ViaUtils.Motion.attitude_to_accel_rad(attitude)
-
-            #   accel_inertial = parse_accel_inertial(buffer)
-            #   # Logger.debug("accel i xyz: #{ViaUtils.Format.eftb_map(accel_inertial, 3)}")
-            #   # Logger.debug("accel g xyz: #{ViaUtils.Format.eftb_map(accel_gravity, 3)}")
-
-            #   accel = %{
-            #     ax_mpss: accel_gravity.x + accel_inertial.ax_mpss,
-            #     ay_mpss: accel_gravity.y + accel_inertial.ay_mpss,
-            #     az_mpss: accel_gravity.z + accel_inertial.az_mpss
-            #   }
-
-            #   # Logger.debug("accel xyz: #{ViaUtils.Format.eftb_map(accel,3)}")
-            #   %{state | bodyaccel_mpss: accel}
 
             16 ->
               bodyrate_rps = parse_bodyrate(buffer)
@@ -512,13 +490,7 @@ defmodule XplaneIntegration.Receive do
 
     # Logger.debug("iner: #{ViaUtils.Format.eftb_list(Tuple.to_list(accel_inertial), 3)}")
     {abx, aby, abz} = ViaUtils.Motion.inertial_to_body_euler_rad(attitude_rad, accel_inertial)
-    # Add gravity
-    # Rotate entire vector to body frame
-    # Logger.debug("iner: #{ViaUtils.Format.eftb_map(%{ax: abx, ay: aby, az: abz}, 3)}")
-    # Logger.debug("dt: #{ViaUtils.Format.eftb(dt_s,4)}")
-    # accel_gravity = ViaUtils.Motion.attitude_to_accel_rad(attitude_rad)
 
-    # Logger.debug("grav: #{ViaUtils.Format.eftb_map(accel_gravity, 3)}")
     %{
       ax_mpss: abx,
       ay_mpss: aby,

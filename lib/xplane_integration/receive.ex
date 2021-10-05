@@ -3,6 +3,7 @@ defmodule XplaneIntegration.Receive do
   use Bitwise
   use GenServer
   require ViaUtils.Constants, as: VC
+  require ViaUtils.Shared.ValueNames, as: SVN
 
   @dt_accel_gyro_loop :dt_accel_gyro_loop
   @gps_pos_vel_loop :gps_pos_vel_loop
@@ -215,12 +216,12 @@ defmodule XplaneIntegration.Receive do
 
               attitude_rad =
                 if Enum.empty?(state.attitude_rad),
-                  do: %{roll_rad: 0.0, pitch_rad: 0.0, yaw_rad: 0.0},
+                  do: %{SVN.roll_rad() => 0.0, SVN.pitch_rad() => 0.0, SVN.yaw_rad() => 0.0},
                   else: state.attitude_rad
 
               velocity_prev_mps =
                 if Enum.empty?(state.velocity_mps),
-                  do: %{north_mps: 0, east_mps: 0, down_mps: 0},
+                  do: %{SVN.v_north_mps() => 0, SVN.v_east_mps() => 0, SVN.v_down_mps() => 0},
                   else: state.velocity_mps
 
               bodyaccel_mpss =
@@ -286,11 +287,13 @@ defmodule XplaneIntegration.Receive do
   @spec publish_dt_accel_gyro(float(), map(), map(), any()) :: atom()
   def publish_dt_accel_gyro(dt_s, accel_mpss, gyro_rps, group) do
     values =
-      %{dt_s: dt_s}
+      %{SVN.dt_s() => dt_s}
       |> Map.merge(accel_mpss)
       |> Map.merge(gyro_rps)
 
-    # Logger.debug("pub dtaccgy: #{ViaUtils.Format.eftb_map(values,4)}")
+    # Logger.debug("pub dtaccgy: #{ViaUtils.Format.eftb_map(values, 4)}")
+    # Logger.debug("pub group: #{inspect(group)}")
+
     ViaUtils.Comms.send_global_msg_to_group(
       __MODULE__,
       {group, values},
@@ -348,7 +351,7 @@ defmodule XplaneIntegration.Receive do
         buffer
       end)
 
-      %{ax_mpss: 0, ay_mpss: 0, az_mpss: 0}
+      %{SVN.accel_x_mpss() => 0, SVN.accel_y_mpss() => 0, SVN.accel_z_mpss() => 0}
     else
       {_mach_uint32, buffer} = Enum.split(buffer, 4)
       {_vvi, buffer} = Enum.split(buffer, 4)
@@ -375,7 +378,11 @@ defmodule XplaneIntegration.Receive do
         |> ViaUtils.Math.fp_from_uint(32)
         |> Kernel.*(VC.gravity())
 
-      %{ax_mpss: accel_x_mpss, ay_mpss: accel_y_mpss, az_mpss: accel_z_mpss}
+      %{
+        SVN.accel_x_mpss() => accel_x_mpss,
+        SVN.accel_y_mpss() => accel_y_mpss,
+        SVN.accel_z_mpss() => accel_z_mpss
+      }
     end
   end
 
@@ -397,7 +404,7 @@ defmodule XplaneIntegration.Receive do
       ViaUtils.Enum.list_to_int(gz_rps_uint32, 4)
       |> ViaUtils.Math.fp_from_uint(32)
 
-    %{gx_rps: gx_rps, gy_rps: gy_rps, gz_rps: gz_rps}
+    %{SVN.gyro_x_rps() => gx_rps, SVN.gyro_y_rps() => gy_rps, SVN.gyro_z_rps() => gz_rps}
   end
 
   @spec parse_attitude(list()) :: map()
@@ -417,9 +424,9 @@ defmodule XplaneIntegration.Receive do
       |> ViaUtils.Math.fp_from_uint(32)
 
     %{
-      roll_rad: roll_deg * VC.deg2rad(),
-      pitch_rad: pitch_deg * VC.deg2rad(),
-      yaw_rad: yaw_deg * VC.deg2rad()
+      SVN.roll_rad() => roll_deg * VC.deg2rad(),
+      SVN.pitch_rad() => pitch_deg * VC.deg2rad(),
+      SVN.yaw_rad() => yaw_deg * VC.deg2rad()
     }
   end
 
@@ -445,9 +452,9 @@ defmodule XplaneIntegration.Receive do
     agl_ft = ViaUtils.Enum.list_to_int(agl_ft_uint32, 4) |> ViaUtils.Math.fp_from_uint(32)
 
     {%{
-       latitude_rad: latitude_deg * VC.deg2rad(),
-       longitude_rad: longitude_deg * VC.deg2rad(),
-       altitude_m: altitude_ft * VC.ft2m()
+       SVN.latitude_rad() => latitude_deg * VC.deg2rad(),
+       SVN.longitude_rad() => longitude_deg * VC.deg2rad(),
+       SVN.altitude_m() => altitude_ft * VC.ft2m()
      }, agl_ft * VC.ft2m()}
   end
 
@@ -471,19 +478,31 @@ defmodule XplaneIntegration.Receive do
         |> ViaUtils.Math.fp_from_uint(32))
 
     %{
-      north_mps: vel_north_mps,
-      east_mps: vel_east_mps,
-      down_mps: vel_down_mps
+      SVN.v_north_mps() => vel_north_mps,
+      SVN.v_east_mps() => vel_east_mps,
+      SVN.v_down_mps() => vel_down_mps
     }
   end
 
   @spec calculate_body_accel(map(), map(), map(), number()) :: map()
-  def calculate_body_accel(velocity_mps, velocity_prev_mps, attitude_rad, dt_s) do
+  def calculate_body_accel(
+        %{
+          SVN.v_north_mps() => v_north_mps,
+          SVN.v_east_mps() => v_east_mps,
+          SVN.v_down_mps() => v_down_mps
+        } = _velocity,
+        %{
+          SVN.v_north_mps() => v_north_prev_mps,
+          SVN.v_east_mps() => v_east_prev_mps,
+          SVN.v_down_mps() => v_down_prev_mps
+        } = _velocity_prev_mps,
+        attitude_rad,
+        dt_s
+      ) do
     accel_inertial =
       if dt_s > 0 do
-        {(velocity_mps.north_mps - velocity_prev_mps.north_mps) / dt_s,
-         (velocity_mps.east_mps - velocity_prev_mps.east_mps) / dt_s,
-         (velocity_mps.down_mps - velocity_prev_mps.down_mps) / dt_s - VC.gravity()}
+        {(v_north_mps - v_north_prev_mps) / dt_s, (v_east_mps - v_east_prev_mps) / dt_s,
+         (v_down_mps - v_down_prev_mps) / dt_s - VC.gravity()}
       else
         {0, 0, -VC.gravity()}
       end
@@ -492,9 +511,9 @@ defmodule XplaneIntegration.Receive do
     {abx, aby, abz} = ViaUtils.Motion.inertial_to_body_euler_rad(attitude_rad, accel_inertial)
 
     %{
-      ax_mpss: abx,
-      ay_mpss: aby,
-      az_mpss: abz
+      SVN.accel_x_mpss() => abx,
+      SVN.accel_y_mpss() => aby,
+      SVN.accel_z_mpss() => abz
     }
   end
 end

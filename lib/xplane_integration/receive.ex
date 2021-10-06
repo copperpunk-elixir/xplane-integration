@@ -98,15 +98,15 @@ defmodule XplaneIntegration.Receive do
 
   @impl GenServer
   def handle_info({@dt_accel_gyro_loop, dt_s}, state) do
-    bodyaccel_mpss = state.bodyaccel_mpss
-    bodyrate_rps = state.bodyrate_rps
+    %{bodyaccel_mpss: bodyaccel_mpss, bodyrate_rps: bodyrate_rps, dt_accel_gyro_group: group} =
+      state
 
     unless Enum.empty?(bodyaccel_mpss) or Enum.empty?(bodyrate_rps) do
       publish_dt_accel_gyro(
         dt_s,
         bodyaccel_mpss,
         bodyrate_rps,
-        state.dt_accel_gyro_group
+        group
       )
     end
 
@@ -115,14 +115,17 @@ defmodule XplaneIntegration.Receive do
 
   @impl GenServer
   def handle_info(@gps_pos_vel_loop, state) do
-    position_rrm = state.position_rrm
-    velocity_mps = state.velocity_mps
+    %{
+      position_rrm: position_rrm,
+      velocity_mps: velocity_mps,
+      gps_itow_position_velocity_group: group
+    } = state
 
     unless Enum.empty?(position_rrm) or Enum.empty?(velocity_mps) do
       publish_gps_itow_position_velocity(
         position_rrm,
         velocity_mps,
-        state.gps_itow_position_velocity_group
+        group
       )
     end
 
@@ -131,10 +134,11 @@ defmodule XplaneIntegration.Receive do
 
   @impl GenServer
   def handle_info(@gps_relhdg_loop, state) do
-    attitude_rad = state.attitude_rad
+    %{attitude_rad: attitude_rad, gps_itow_relheading_group: group} = state
+    %{SVN.yaw_rad() => yaw_rad} = attitude_rad
 
     unless Enum.empty?(attitude_rad) do
-      publish_gps_relheading(attitude_rad.yaw_rad, state.gps_itow_relheading_group)
+      publish_gps_relheading(yaw_rad, group)
     end
 
     {:noreply, state}
@@ -142,10 +146,10 @@ defmodule XplaneIntegration.Receive do
 
   @impl GenServer
   def handle_info(@airspeed_loop, state) do
-    airspeed_mps = state.airspeed_mps
+    %{airspeed_mps: airspeed_mps, airspeed_group: group} = state
 
     unless is_nil(airspeed_mps) do
-      publish_airspeed(airspeed_mps, state.airspeed_group)
+      publish_airspeed(airspeed_mps, group)
     end
 
     {:noreply, state}
@@ -153,11 +157,10 @@ defmodule XplaneIntegration.Receive do
 
   @impl GenServer
   def handle_info(@down_tof_loop, state) do
-    attitude_rad = state.attitude_rad
-    agl_m = state.agl_m
+    %{attitude_rad: attitude_rad, agl_m: agl_m, downward_tof_distance_group: group} = state
 
     unless Enum.empty?(attitude_rad) or is_nil(agl_m) do
-      publish_downward_tof_distance(attitude_rad, agl_m, state.downward_tof_distance_group)
+      publish_downward_tof_distance(attitude_rad, agl_m, group)
     end
 
     {:noreply, state}

@@ -485,20 +485,19 @@ defmodule XplaneIntegration.Receive do
   end
 
   @spec calculate_body_accel(map(), map(), map(), number()) :: map()
-  def calculate_body_accel(
-        %{
-          SVN.v_north_mps() => v_north_mps,
-          SVN.v_east_mps() => v_east_mps,
-          SVN.v_down_mps() => v_down_mps
-        } = _velocity,
-        %{
-          SVN.v_north_mps() => v_north_prev_mps,
-          SVN.v_east_mps() => v_east_prev_mps,
-          SVN.v_down_mps() => v_down_prev_mps
-        } = _velocity_prev_mps,
-        attitude_rad,
-        dt_s
-      ) do
+  def calculate_body_accel(velocity, velocity_prev_mps, attitude_rad, dt_s) do
+    %{
+      SVN.v_north_mps() => v_north_mps,
+      SVN.v_east_mps() => v_east_mps,
+      SVN.v_down_mps() => v_down_mps
+    } = velocity
+
+    %{
+      SVN.v_north_mps() => v_north_prev_mps,
+      SVN.v_east_mps() => v_east_prev_mps,
+      SVN.v_down_mps() => v_down_prev_mps
+    } = velocity_prev_mps
+
     accel_inertial =
       if dt_s > 0 do
         {(v_north_mps - v_north_prev_mps) / dt_s, (v_east_mps - v_east_prev_mps) / dt_s,

@@ -135,9 +135,9 @@ defmodule XplaneIntegration.Receive do
   @impl GenServer
   def handle_info(@gps_relhdg_loop, state) do
     %{attitude_rad: attitude_rad, gps_itow_relheading_group: group} = state
-    %{SVN.yaw_rad() => yaw_rad} = attitude_rad
 
     unless Enum.empty?(attitude_rad) do
+      %{SVN.yaw_rad() => yaw_rad} = attitude_rad
       publish_gps_relheading(yaw_rad, group)
     end
 
@@ -205,38 +205,56 @@ defmodule XplaneIntegration.Receive do
             20 ->
               {position_rrm, agl_m} = parse_position_agl(buffer)
 
-              # Logger.debug("lat/lon/alt/agl: #{ViaUtils.Location.to_string(position_rrm)}/#{ViaUtils.Format.eftb(agl_m,1)}")
+              # Logger.debug("#{ViaUtils.Location.to_string(position_rrm)}/#{ViaUtils.Format.eftb(agl_m,1)}")
               %{state | position_rrm: position_rrm, agl_m: agl_m}
 
             21 ->
               velocity_mps = parse_velocity(buffer)
               current_time_us = :os.system_time(:microsecond)
 
+              %{
+                velocity_time_prev_us: velocity_time_prev_us,
+                attitude_rad: attitude_rad,
+                bodyaccel_mpss: current_bodyaccel_mpss
+              } = state
+
               dt_s =
-                if is_nil(state.velocity_time_prev_us),
-                  do: 0,
-                  else: (current_time_us - state.velocity_time_prev_us) * 1.0e-6
+                if is_nil(velocity_time_prev_us),
+                  do: 0.006,
+                  else: (current_time_us - velocity_time_prev_us) * 1.0e-6
 
-              attitude_rad =
-                if Enum.empty?(state.attitude_rad),
-                  do: %{SVN.roll_rad() => 0.0, SVN.pitch_rad() => 0.0, SVN.yaw_rad() => 0.0},
-                  else: state.attitude_rad
+              {bodyaccel_mpss, velocity_time_prev_us} =
+                if dt_s > 0.005 do
+                  attitude_rad =
+                    if Enum.empty?(attitude_rad),
+                      do: %{SVN.roll_rad() => 0.0, SVN.pitch_rad() => 0.0, SVN.yaw_rad() => 0.0},
+                      else: attitude_rad
 
-              velocity_prev_mps =
-                if Enum.empty?(state.velocity_mps),
-                  do: %{SVN.v_north_mps() => 0, SVN.v_east_mps() => 0, SVN.v_down_mps() => 0},
-                  else: state.velocity_mps
+                  velocity_prev_mps =
+                    if Enum.empty?(velocity_mps),
+                      do: %{SVN.v_north_mps() => 0, SVN.v_east_mps() => 0, SVN.v_down_mps() => 0},
+                      else: velocity_mps
 
-              bodyaccel_mpss =
-                calculate_body_accel(velocity_mps, velocity_prev_mps, attitude_rad, dt_s)
+                  bodyaccel_mpss =
+                    calculate_body_accel(velocity_mps, velocity_prev_mps, attitude_rad, dt_s)
 
-              # Logger.debug("vNED: #{ViaUtils.Format.eftb_map(velocity_mps, 1)}")
-              # Logger.debug("bodyaccel: #{ViaUtils.Format.eftb_map(bodyaccel_mpss, 3)}")
+                  # Logger.debug(
+                  #   "dt/vNED:#{ViaUtils.Format.eftb(dt_s, 4)}/#{ViaUtils.Format.eftb_map(velocity_mps, 1)}"
+                  # )
+
+                  # Logger.debug("bodyaccel: #{ViaUtils.Format.eftb_map(bodyaccel_mpss, 3)}")
+
+                  {bodyaccel_mpss, current_time_us}
+                else
+                  Logger.debug("XP Vel Cluster: #{dt_s}")
+                  {current_bodyaccel_mpss, velocity_time_prev_us}
+                end
+
               %{
                 state
                 | velocity_mps: velocity_mps,
                   bodyaccel_mpss: bodyaccel_mpss,
-                  velocity_time_prev_us: current_time_us
+                  velocity_time_prev_us: velocity_time_prev_us
               }
 
             other ->

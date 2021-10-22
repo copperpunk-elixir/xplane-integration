@@ -284,7 +284,7 @@ defmodule XplaneIntegration.Receive do
     #   "pub gps pos/vel: #{ViaUtils.Location.to_string(position_rrm)}/#{ViaUtils.Format.eftb_map(velocity_mps, 1)}"
     # )
 
-    ViaUtils.Comms.send_global_msg_to_group(
+    ViaUtils.Comms.cast_global_msg_to_group(
       __MODULE__,
       {group, itow_ms, position_rrm, velocity_mps},
       self()
@@ -298,7 +298,7 @@ defmodule XplaneIntegration.Receive do
 
     # Logger.debug("pub relhdg: #{ViaUtils.Format.eftb_deg(rel_heading_rad, 1)}")
 
-    ViaUtils.Comms.send_global_msg_to_group(
+    ViaUtils.Comms.cast_global_msg_to_group(
       __MODULE__,
       {group, itow_ms, rel_heading_rad},
       self()
@@ -315,7 +315,7 @@ defmodule XplaneIntegration.Receive do
     # Logger.debug("pub dtaccgy: #{ViaUtils.Format.eftb_map(values, 4)}")
     # Logger.debug("pub group: #{inspect(group)}")
 
-    ViaUtils.Comms.send_global_msg_to_group(
+    ViaUtils.Comms.cast_global_msg_to_group(
       __MODULE__,
       {group, values},
       self()
@@ -326,7 +326,7 @@ defmodule XplaneIntegration.Receive do
   def publish_airspeed(airspeed_mps, group) do
     Logger.debug("pub A/S: #{ViaUtils.Format.eftb(airspeed_mps, 1)}")
 
-    ViaUtils.Comms.send_global_msg_to_group(
+    ViaUtils.Comms.cast_global_msg_to_group(
       __MODULE__,
       {group, airspeed_mps},
       self()
@@ -340,7 +340,7 @@ defmodule XplaneIntegration.Receive do
 
     # Logger.debug("pub tof: #{ViaUtils.Format.eftb(range_meas, 1)}")
 
-    ViaUtils.Comms.send_global_msg_to_group(
+    ViaUtils.Comms.cast_global_msg_to_group(
       __MODULE__,
       {group, range_meas},
       self()

@@ -4,12 +4,11 @@ defmodule XplaneIntegration.Receive do
   use GenServer
   require ViaUtils.Constants, as: VC
   require ViaUtils.Shared.ValueNames, as: SVN
-
   @dt_accel_gyro_loop :dt_accel_gyro_loop
   @gps_pos_vel_loop :gps_pos_vel_loop
   @gps_relhdg_loop :gps_relhdg_loop
   @airspeed_loop :airspeed_loop
-  @down_tof_loop :down_tof_loop
+  @down_range_loop :down_range_loop
 
   def start_link(config) do
     Logger.debug("Start Simulation.XplaneReceive")
@@ -25,7 +24,9 @@ defmodule XplaneIntegration.Receive do
     publish_gps_position_velocity_interval_ms = config[:publish_gps_position_velocity_interval_ms]
     publish_gps_relative_heading_interval_ms = config[:publish_gps_relative_heading_interval_ms]
     publish_airspeed_interval_ms = config[:publish_airspeed_interval_ms]
-    publish_downward_tof_distance_interval_ms = config[:publish_downward_tof_distance_interval_ms]
+
+    publish_downward_range_distance_interval_ms =
+      config[:publish_downward_range_distance_interval_ms]
 
     state = %{
       socket: socket,
@@ -39,16 +40,18 @@ defmodule XplaneIntegration.Receive do
       agl_m: nil,
       airspeed_mps: nil,
       velocity_time_prev_us: nil,
+      downward_range_max_m: Keyword.get(config, :downward_range_max_m, 0),
       dt_accel_gyro_group: config[:dt_accel_gyro_group],
       gps_itow_position_velocity_group: config[:gps_itow_position_velocity_group],
       gps_itow_relheading_group: config[:gps_itow_relheading_group],
       airspeed_group: config[:airspeed_group],
-      downward_tof_distance_group: config[:downward_tof_distance_group],
+      downward_range_distance_group: config[:downward_range_distance_group],
+      downward_range_module: config[:downward_range_module],
       publish_dt_accel_gyro_interval_ms: publish_dt_accel_gyro_interval_ms,
       publish_gps_position_velocity_interval_ms: publish_gps_position_velocity_interval_ms,
       publish_gps_relative_heading_interval_ms: publish_gps_relative_heading_interval_ms,
       publish_airspeed_interval_ms: publish_airspeed_interval_ms,
-      publish_downward_tof_distance_interval_ms: publish_downward_tof_distance_interval_ms
+      publish_downward_range_distance_interval_ms: publish_downward_range_distance_interval_ms
     }
 
     ViaUtils.Comms.Supervisor.start_operator(__MODULE__)
@@ -71,7 +74,12 @@ defmodule XplaneIntegration.Receive do
       @gps_relhdg_loop
     )
 
-    ViaUtils.Process.start_loop(self(), publish_downward_tof_distance_interval_ms, @down_tof_loop)
+    ViaUtils.Process.start_loop(
+      self(),
+      publish_downward_range_distance_interval_ms,
+      @down_range_loop
+    )
+
     {:ok, state}
   end
 
@@ -156,11 +164,23 @@ defmodule XplaneIntegration.Receive do
   end
 
   @impl GenServer
-  def handle_info(@down_tof_loop, state) do
-    %{attitude_rad: attitude_rad, agl_m: agl_m, downward_tof_distance_group: group} = state
+  def handle_info(@down_range_loop, state) do
+    %{
+      attitude_rad: attitude_rad,
+      agl_m: agl_m,
+      downward_range_distance_group: group,
+      downward_range_max_m: downward_range_max_m,
+      downward_range_module: downward_range_module
+    } = state
 
     unless Enum.empty?(attitude_rad) or is_nil(agl_m) do
-      publish_downward_tof_distance(attitude_rad, agl_m, group)
+      publish_downward_range_distance(
+        attitude_rad,
+        agl_m,
+        downward_range_module,
+        downward_range_max_m,
+        group
+      )
     end
 
     {:noreply, state}
@@ -278,47 +298,35 @@ defmodule XplaneIntegration.Receive do
   @spec publish_gps_itow_position_velocity(map(), map(), any()) :: atom()
   def publish_gps_itow_position_velocity(position_rrm, velocity_mps, group) do
     # TODO: Get correct value for itow_ms
-    itow_ms = nil
 
     # Logger.debug(
     #   "pub gps pos/vel: #{ViaUtils.Location.to_string(position_rrm)}/#{ViaUtils.Format.eftb_map(velocity_mps, 1)}"
     # )
-
-    ViaUtils.Comms.cast_global_msg_to_group(
+    ViaSimulation.Comms.publish_gps_itow_position_velocity(
       __MODULE__,
-      {group, itow_ms, position_rrm, velocity_mps},
-      self()
+      position_rrm,
+      velocity_mps,
+      group
     )
   end
 
   @spec publish_gps_relheading(float(), any()) :: atom()
   def publish_gps_relheading(rel_heading_rad, group) do
-    # TODO: Get correct value for itow_ms
-    itow_ms = nil
-
-    # Logger.debug("pub relhdg: #{ViaUtils.Format.eftb_deg(rel_heading_rad, 1)}")
-
-    ViaUtils.Comms.cast_global_msg_to_group(
+    ViaSimulation.Comms.publish_gps_relheading(
       __MODULE__,
-      {group, itow_ms, rel_heading_rad},
-      self()
+      rel_heading_rad,
+      group
     )
   end
 
   @spec publish_dt_accel_gyro(float(), map(), map(), any()) :: atom()
   def publish_dt_accel_gyro(dt_s, accel_mpss, gyro_rps, group) do
-    values =
-      %{SVN.dt_s() => dt_s}
-      |> Map.merge(accel_mpss)
-      |> Map.merge(gyro_rps)
-
-    # Logger.debug("pub dtaccgy: #{ViaUtils.Format.eftb_map(values, 4)}")
-    # Logger.debug("pub group: #{inspect(group)}")
-
-    ViaUtils.Comms.cast_global_msg_to_group(
+    ViaSimulation.Comms.publish_dt_accel_gyro(
       __MODULE__,
-      {group, values},
-      self()
+      dt_s,
+      accel_mpss,
+      gyro_rps,
+      group
     )
   end
 
@@ -333,18 +341,25 @@ defmodule XplaneIntegration.Receive do
     )
   end
 
-  @spec publish_downward_tof_distance(map(), float(), any()) :: atom()
-  def publish_downward_tof_distance(attitude_rad, agl_m, group) do
-    range_meas = agl_m / (:math.cos(attitude_rad.roll_rad) * :math.cos(attitude_rad.pitch_rad))
-    range_meas = if range_meas < 0, do: 0, else: range_meas
+  @spec publish_downward_range_distance(map(), number(), module(), number(), any()) :: atom()
+  def publish_downward_range_distance(
+        attitude_rad,
+        agl_m,
+        downward_range_module,
+        range_max,
+        group
+      ) do
+    range_m = ViaUtils.Motion.agl_to_range_measurement(attitude_rad, agl_m)
 
-    # Logger.debug("pub tof: #{ViaUtils.Format.eftb(range_meas, 1)}")
-
-    ViaUtils.Comms.cast_global_msg_to_group(
-      __MODULE__,
-      {group, range_meas},
-      self()
-    )
+    if range_m < range_max do
+      # Logger.debug("pub agl/range: #{ViaUtils.Format.eftb(agl_m, 1)}/#{ViaUtils.Format.eftb(range_meas, 1)}")
+      ViaSimulation.Comms.publish_downward_range_distance(
+        __MODULE__,
+        range_m,
+        downward_range_module,
+        group
+      )
+    end
   end
 
   @spec parse_airspeed(list()) :: number()

@@ -49,8 +49,14 @@ defmodule XplaneIntegration.MixProject do
   defp deps do
     [
       {:ex_doc, "~> 0.24", only: :dev, runtime: false},
-      {:via_utils, "~> 0.2.0"},# path: "/home/ubuntu/Documents/Github/cp-elixir/libraries/via-utils", override: true},#git: "https://github.com/copperpunk-elixir/via-utils.git", tag: "v0.1.4-alpha"}
-      {:ubx_interpreter, "~> 0.1.1"}
+      # git: "https://github.com/copperpunk-elixir/via-utils.git", tag: "v0.1.4-alpha"}
+      {:via_utils,
+       path: "/home/ubuntu/Documents/Github/cp-elixir/libraries/via-utils", override: true},
+      {:ubx_interpreter,
+       path: "/home/ubuntu/Documents/Github/cp-elixir/libraries/ubx-interpreter"},
+      {:via_simulation, path: "/home/ubuntu/Documents/Github/cp-elixir/libraries/via-simulation"}
+
+      # {:ubx_interpreter, "~> 0.1.1"}
       # {:dep_from_hexpm, "~> 0.3.0"},
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
     ]

@@ -70,7 +70,7 @@ defmodule XplaneIntegration.Send do
   end
 
   @impl GenServer
-  def handle_cast({:simulation_update_actuators, actuators_and_outputs, is_override}, state) do
+  def handle_cast({:simulation_update_actuators, actuators_and_outputs, _is_override}, state) do
     # Logger.debug("xp send rx up_act: #{ViaUtils.Format.eftb_map(actuators_and_outputs, 3)}")
 
     dest_ip = state.destination_ip_address
@@ -78,15 +78,18 @@ defmodule XplaneIntegration.Send do
     unless is_nil(dest_ip) do
       cmds =
         Enum.reduce(actuators_and_outputs, %{}, fn {actuator_name, output}, acc ->
-          if is_override do
-            case actuator_name do
-              :flaps_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
-              :gear_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
-              :throttle_scaled -> Map.put(acc, actuator_name, get_one_sided_value(output))
-              name -> Map.put(acc, name, output)
-            end
-          else
-            Map.put(acc, actuator_name, output)
+          case actuator_name do
+            :flaps_scaled ->
+              Map.put(acc, actuator_name, ViaUtils.Math.get_one_sided_from_two_sided(output))
+
+            :gear_scaled ->
+              Map.put(acc, actuator_name, ViaUtils.Math.get_one_sided_from_two_sided(output))
+
+            :throttle_scaled ->
+              Map.put(acc, actuator_name, ViaUtils.Math.get_one_sided_from_two_sided(output))
+
+            name ->
+              Map.put(acc, name, output)
           end
         end)
 
@@ -177,8 +180,8 @@ defmodule XplaneIntegration.Send do
     GenServer.cast(__MODULE__, {:send_commands, :flaps, commands})
   end
 
-  @spec get_one_sided_value(number()) :: number()
-  def get_one_sided_value(two_sided_value) do
-    0.5 * two_sided_value + 0.5
-  end
+  # @spec get_one_sided_value(number()) :: number()
+  # def get_one_sided_value(two_sided_value) do
+  #   0.5 * two_sided_value + 0.5
+  # end
 end

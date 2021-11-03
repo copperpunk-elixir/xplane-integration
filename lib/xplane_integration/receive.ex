@@ -110,7 +110,8 @@ defmodule XplaneIntegration.Receive do
       state
 
     unless Enum.empty?(bodyaccel_mpss) or Enum.empty?(bodyrate_rps) do
-      publish_dt_accel_gyro(
+      ViaSimulation.Comms.publish_dt_accel_gyro(
+        __MODULE__,
         dt_s,
         bodyaccel_mpss,
         bodyrate_rps,
@@ -130,7 +131,8 @@ defmodule XplaneIntegration.Receive do
     } = state
 
     unless Enum.empty?(position_rrm) or Enum.empty?(velocity_mps) do
-      publish_gps_itow_position_velocity(
+      ViaSimulation.Comms.publish_gps_itow_position_velocity(
+        __MODULE__,
         position_rrm,
         velocity_mps,
         group
@@ -146,7 +148,12 @@ defmodule XplaneIntegration.Receive do
 
     unless Enum.empty?(attitude_rad) do
       %{SVN.yaw_rad() => yaw_rad} = attitude_rad
-      publish_gps_relheading(yaw_rad, group)
+
+      ViaSimulation.Comms.publish_gps_relheading(
+        __MODULE__,
+        yaw_rad,
+        group
+      )
     end
 
     {:noreply, state}
@@ -157,7 +164,11 @@ defmodule XplaneIntegration.Receive do
     %{airspeed_mps: airspeed_mps, airspeed_group: group} = state
 
     unless is_nil(airspeed_mps) do
-      publish_airspeed(airspeed_mps, group)
+      ViaUtils.Comms.cast_global_msg_to_group(
+        __MODULE__,
+        {group, airspeed_mps},
+        self()
+      )
     end
 
     {:noreply, state}
@@ -174,13 +185,18 @@ defmodule XplaneIntegration.Receive do
     } = state
 
     unless Enum.empty?(attitude_rad) or is_nil(agl_m) do
-      publish_downward_range_distance(
-        attitude_rad,
-        agl_m,
-        downward_range_module,
-        downward_range_max_m,
-        group
-      )
+      range_m =
+        ViaUtils.Motion.agl_to_range_measurement(attitude_rad, agl_m, downward_range_max_m)
+
+      if range_m < downward_range_max_m do
+        # Logger.debug("pub agl/range: #{ViaUtils.Format.eftb(agl_m, 1)}/#{ViaUtils.Format.eftb(range_meas, 1)}")
+        ViaSimulation.Comms.publish_downward_range_distance(
+          __MODULE__,
+          range_m,
+          downward_range_module,
+          group
+        )
+      end
     end
 
     {:noreply, state}
@@ -292,73 +308,6 @@ defmodule XplaneIntegration.Receive do
       parse_message(buffer, state)
     else
       state
-    end
-  end
-
-  @spec publish_gps_itow_position_velocity(map(), map(), any()) :: atom()
-  def publish_gps_itow_position_velocity(position_rrm, velocity_mps, group) do
-    # TODO: Get correct value for itow_ms
-
-    # Logger.debug(
-    #   "pub gps pos/vel: #{ViaUtils.Location.to_string(position_rrm)}/#{ViaUtils.Format.eftb_map(velocity_mps, 1)}"
-    # )
-    ViaSimulation.Comms.publish_gps_itow_position_velocity(
-      __MODULE__,
-      position_rrm,
-      velocity_mps,
-      group
-    )
-  end
-
-  @spec publish_gps_relheading(float(), any()) :: atom()
-  def publish_gps_relheading(rel_heading_rad, group) do
-    ViaSimulation.Comms.publish_gps_relheading(
-      __MODULE__,
-      rel_heading_rad,
-      group
-    )
-  end
-
-  @spec publish_dt_accel_gyro(float(), map(), map(), any()) :: atom()
-  def publish_dt_accel_gyro(dt_s, accel_mpss, gyro_rps, group) do
-    ViaSimulation.Comms.publish_dt_accel_gyro(
-      __MODULE__,
-      dt_s,
-      accel_mpss,
-      gyro_rps,
-      group
-    )
-  end
-
-  @spec publish_airspeed(float(), any()) :: atom()
-  def publish_airspeed(airspeed_mps, group) do
-    Logger.debug("pub A/S: #{ViaUtils.Format.eftb(airspeed_mps, 1)}")
-
-    ViaUtils.Comms.cast_global_msg_to_group(
-      __MODULE__,
-      {group, airspeed_mps},
-      self()
-    )
-  end
-
-  @spec publish_downward_range_distance(map(), number(), module(), number(), any()) :: atom()
-  def publish_downward_range_distance(
-        attitude_rad,
-        agl_m,
-        downward_range_module,
-        range_max,
-        group
-      ) do
-    range_m = ViaUtils.Motion.agl_to_range_measurement(attitude_rad, agl_m)
-
-    if range_m < range_max do
-      # Logger.debug("pub agl/range: #{ViaUtils.Format.eftb(agl_m, 1)}/#{ViaUtils.Format.eftb(range_meas, 1)}")
-      ViaSimulation.Comms.publish_downward_range_distance(
-        __MODULE__,
-        range_m,
-        downward_range_module,
-        group
-      )
     end
   end
 

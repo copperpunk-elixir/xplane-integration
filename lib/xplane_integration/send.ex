@@ -3,10 +3,10 @@ defmodule XplaneIntegration.Send do
   use GenServer
   require Logger
   require ViaUtils.Shared.Groups, as: Groups
-  require ViaUtils.Ubx.ClassDefs, as: ClassDefs
-  require ViaUtils.Ubx.VehicleCmds.ActuatorCmdDirect, as: ActuatorCmdDirect
-  require ViaUtils.Ubx.VehicleCmds.BodyrateActuatorOutput, as: BodyrateActuatorOutput
-  require ViaUtils.Shared.ActuatorNames, as: Act
+  require ViaTelemetry.Ubx.Custom.ClassDefs, as: ClassDefs
+  require ViaTelemetry.Ubx.Custom.VehicleCmds.ActuatorCmdDirect, as: ActuatorCmdDirect
+  require ViaTelemetry.Ubx.Custom.VehicleCmds.ControllerActuatorOutput, as: ControllerActuatorOutput
+  require ViaUtils.Shared.GoalNames, as: SGN
   @cmd_header <<68, 65, 84, 65, 0>>
   @zeros_1 <<0, 0, 0, 0>>
   @zeros_3 <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0>>
@@ -95,20 +95,20 @@ defmodule XplaneIntegration.Send do
       case msg_class do
         ClassDefs.vehicle_cmds() ->
           case msg_id do
-            BodyrateActuatorOutput.id() ->
+            ControllerActuatorOutput.id() ->
               cmds =
                 UbxInterpreter.deconstruct_message_to_map(
-                  BodyrateActuatorOutput.bytes(),
-                  BodyrateActuatorOutput.multipliers(),
-                  BodyrateActuatorOutput.keys(),
+                  ControllerActuatorOutput.bytes(),
+                  ControllerActuatorOutput.multipliers(),
+                  ControllerActuatorOutput.keys(),
                   payload
                 )
 
               %{
-                Act.aileron() => aileron_scaled,
-                Act.elevator() => elevator_scaled,
-                Act.throttle() => throttle_scaled,
-                Act.rudder() => rudder_scaled
+                SGN.aileron_scaled() => aileron_scaled,
+                SGN.elevator_scaled() => elevator_scaled,
+                SGN.throttle_scaled() => throttle_scaled,
+                SGN.rudder_scaled() => rudder_scaled
               } = cmds
 
               throttle_scaled = ViaUtils.Math.get_one_sided_from_two_sided(throttle_scaled)
@@ -125,17 +125,13 @@ defmodule XplaneIntegration.Send do
               send_throttle_command(throttle_scaled, socket, dest_ip, dest_port)
 
             ActuatorCmdDirect.id() ->
-              cmds = ActuatorCmdDirect.Utils.get_actuator_output(payload, state.channel_names)
+              cmds = ActuatorCmdDirect.get_output_values(payload, state.channel_names)
               # Logger.debug("direct act: #{inspect(cmds)}")
-              ail_elev_rud_cmds = Map.take(cmds, [Act.aileron(), Act.elevator(), Act.rudder()])
+              aileron_scaled = Map.get(cmds, SGN.aileron_scaled())
+              elevator_scaled = Map.get(cmds, SGN.elevator_scaled())
+              rudder_scaled = Map.get(cmds, SGN.rudder_scaled())
 
-              if map_size(ail_elev_rud_cmds) == 3 do
-                %{
-                  Act.aileron() => aileron_scaled,
-                  Act.elevator() => elevator_scaled,
-                  Act.rudder() => rudder_scaled
-                } = ail_elev_rud_cmds
-
+              unless is_nil(aileron_scaled) or is_nil(elevator_scaled) or is_nil(rudder_scaled) do
                 send_ail_elev_rud_commands(
                   aileron_scaled,
                   elevator_scaled,
@@ -146,14 +142,14 @@ defmodule XplaneIntegration.Send do
                 )
               end
 
-              throttle_scaled = Map.get(cmds, Act.throttle())
+              throttle_scaled = Map.get(cmds, SGN.throttle_scaled())
 
               unless is_nil(throttle_scaled) do
                 throttle_scaled = ViaUtils.Math.get_one_sided_from_two_sided(throttle_scaled)
                 send_throttle_command(throttle_scaled, socket, dest_ip, dest_port)
               end
 
-              flaps_scaled = Map.get(cmds, Act.flaps())
+              flaps_scaled = Map.get(cmds, SGN.flaps_scaled())
 
               unless is_nil(flaps_scaled) do
                 flaps_scaled = ViaUtils.Math.get_one_sided_from_two_sided(flaps_scaled)

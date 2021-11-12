@@ -315,7 +315,7 @@ defmodule XplaneIntegration.Receive do
   def parse_airspeed(buffer) do
     {indicated_airspeed_knots_uint32, _buffer} = Enum.split(buffer, 4)
 
-    ViaUtils.Enum.list_to_int(indicated_airspeed_knots_uint32, 4)
+    ViaUtils.Enum.list_to_int_little_end(indicated_airspeed_knots_uint32)
     |> ViaUtils.Math.fp_from_uint(32)
     |> Kernel.*(VC.knots2mps())
   end
@@ -329,7 +329,7 @@ defmodule XplaneIntegration.Receive do
         {value, buffer} = Enum.split(acc, 4)
 
         value =
-          ViaUtils.Enum.list_to_int(value, 4)
+          ViaUtils.Enum.list_to_int_little_end(value)
           |> ViaUtils.Math.fp_from_uint(32)
 
         Logger.warn(ViaUtils.Format.eftb(value, 3))
@@ -348,18 +348,18 @@ defmodule XplaneIntegration.Receive do
       {accel_y_g_uint32, _buffer} = Enum.split(buffer, 4)
 
       accel_z_mpss =
-        ViaUtils.Enum.list_to_int(accel_z_g_uint32, 4)
+        ViaUtils.Enum.list_to_int_little_end(accel_z_g_uint32)
         |> ViaUtils.Math.fp_from_uint(32)
         |> Kernel.-(1)
         |> Kernel.*(-VC.gravity())
 
       accel_x_mpss =
-        ViaUtils.Enum.list_to_int(accel_x_g_uint32, 4)
+        ViaUtils.Enum.list_to_int_little_end(accel_x_g_uint32)
         |> ViaUtils.Math.fp_from_uint(32)
         |> Kernel.*(VC.gravity())
 
       accel_y_mpss =
-        ViaUtils.Enum.list_to_int(accel_y_g_uint32, 4)
+        ViaUtils.Enum.list_to_int_little_end(accel_y_g_uint32)
         |> ViaUtils.Math.fp_from_uint(32)
         |> Kernel.*(VC.gravity())
 
@@ -378,15 +378,15 @@ defmodule XplaneIntegration.Receive do
     {gz_rps_uint32, _buffer} = Enum.split(buffer, 4)
 
     gx_rps =
-      ViaUtils.Enum.list_to_int(gx_rps_uint32, 4)
+      ViaUtils.Enum.list_to_int_little_end(gx_rps_uint32)
       |> ViaUtils.Math.fp_from_uint(32)
 
     gy_rps =
-      ViaUtils.Enum.list_to_int(gy_rps_uint32, 4)
+      ViaUtils.Enum.list_to_int_little_end(gy_rps_uint32)
       |> ViaUtils.Math.fp_from_uint(32)
 
     gz_rps =
-      ViaUtils.Enum.list_to_int(gz_rps_uint32, 4)
+      ViaUtils.Enum.list_to_int_little_end(gz_rps_uint32)
       |> ViaUtils.Math.fp_from_uint(32)
 
     %{SVN.gyro_x_rps() => gx_rps, SVN.gyro_y_rps() => gy_rps, SVN.gyro_z_rps() => gz_rps}
@@ -398,14 +398,14 @@ defmodule XplaneIntegration.Receive do
     {roll_deg_uint32, buffer} = Enum.split(buffer, 4)
     {yaw_deg_uint32, _buffer} = Enum.split(buffer, 4)
 
-    yaw_deg = ViaUtils.Enum.list_to_int(yaw_deg_uint32, 4) |> ViaUtils.Math.fp_from_uint(32)
+    yaw_deg = ViaUtils.Enum.list_to_int_little_end(yaw_deg_uint32) |> ViaUtils.Math.fp_from_uint(32)
 
     pitch_deg =
-      ViaUtils.Enum.list_to_int(pitch_deg_uint32, 4)
+      ViaUtils.Enum.list_to_int_little_end(pitch_deg_uint32)
       |> ViaUtils.Math.fp_from_uint(32)
 
     roll_deg =
-      ViaUtils.Enum.list_to_int(roll_deg_uint32, 4)
+      ViaUtils.Enum.list_to_int_little_end(roll_deg_uint32)
       |> ViaUtils.Math.fp_from_uint(32)
 
     %{
@@ -423,18 +423,18 @@ defmodule XplaneIntegration.Receive do
     {agl_ft_uint32, _buffer} = Enum.split(buffer, 4)
 
     latitude_deg =
-      ViaUtils.Enum.list_to_int(latitude_deg_uint32, 4)
+      ViaUtils.Enum.list_to_int_little_end(latitude_deg_uint32)
       |> ViaUtils.Math.fp_from_uint(32)
 
     longitude_deg =
-      ViaUtils.Enum.list_to_int(longitude_deg_uint32, 4)
+      ViaUtils.Enum.list_to_int_little_end(longitude_deg_uint32)
       |> ViaUtils.Math.fp_from_uint(32)
 
     altitude_ft =
-      ViaUtils.Enum.list_to_int(altitude_ft_uint32, 4)
+      ViaUtils.Enum.list_to_int_little_end(altitude_ft_uint32)
       |> ViaUtils.Math.fp_from_uint(32)
 
-    agl_ft = ViaUtils.Enum.list_to_int(agl_ft_uint32, 4) |> ViaUtils.Math.fp_from_uint(32)
+    agl_ft = ViaUtils.Enum.list_to_int_little_end(agl_ft_uint32) |> ViaUtils.Math.fp_from_uint(32)
 
     {%{
        SVN.latitude_rad() => latitude_deg * VC.deg2rad(),
@@ -451,15 +451,15 @@ defmodule XplaneIntegration.Receive do
     {vel_south_mps_uint32, _buffer} = Enum.split(buffer, 4)
 
     vel_north_mps =
-      -(ViaUtils.Enum.list_to_int(vel_south_mps_uint32, 4)
+      -(ViaUtils.Enum.list_to_int_little_end(vel_south_mps_uint32)
         |> ViaUtils.Math.fp_from_uint(32))
 
     vel_east_mps =
-      ViaUtils.Enum.list_to_int(vel_east_mps_uint32, 4)
+      ViaUtils.Enum.list_to_int_little_end(vel_east_mps_uint32)
       |> ViaUtils.Math.fp_from_uint(32)
 
     vel_down_mps =
-      -(ViaUtils.Enum.list_to_int(vel_up_mps_uint32, 4)
+      -(ViaUtils.Enum.list_to_int_little_end(vel_up_mps_uint32)
         |> ViaUtils.Math.fp_from_uint(32))
 
     %{

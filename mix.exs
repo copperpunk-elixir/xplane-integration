@@ -54,7 +54,8 @@ defmodule XplaneIntegration.MixProject do
        path: "/home/ubuntu/Documents/Github/cp-elixir/libraries/via-utils", override: true},
       {:ubx_interpreter,
        path: "/home/ubuntu/Documents/Github/cp-elixir/libraries/ubx-interpreter"},
-      {:via_simulation, path: "/home/ubuntu/Documents/Github/cp-elixir/libraries/via-simulation"}
+      {:via_simulation, path: "/home/ubuntu/Documents/Github/cp-elixir/libraries/via-simulation"},
+      {:via_telemetry, path: "/home/ubuntu/Documents/Github/cp-elixir/libraries/via-telemetry"}
 
       # {:ubx_interpreter, "~> 0.1.1"}
       # {:dep_from_hexpm, "~> 0.3.0"},
